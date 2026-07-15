@@ -42,11 +42,10 @@ if 'logged_in' not in st.session_state:
 if 'staff_name' not in st.session_state:
     st.session_state['staff_name'] = ""
 
-# Biến tạm để reset trắng 2 ô nhập liệu và hiển thị thông báo
-if 'seat_input' not in st.session_state:
-    st.session_state['seat_input'] = ""
-if 'box_input' not in st.session_state:
-    st.session_state['box_input'] = ""
+# Dùng key động để reset toàn bộ form nhập liệu
+if 'form_key' not in st.session_state:
+    st.session_state['form_key'] = 0
+
 if 'success_msg' not in st.session_state:
     st.session_state['success_msg'] = ""
 if 'error_msg' not in st.session_state:
@@ -105,7 +104,7 @@ if not st.session_state['logged_in']:
     danh_sach_pass_hop_le = {
         "DongThung01": "Kho Bãi 1",
         "DongThung02": "Kho Bãi 2",
-        "0519": "Lê Phương" # Đã update Tên của m
+        "0519": "Lê Phương"
     }
 
     if st.button("Vào hệ thống", type="primary"):
@@ -134,17 +133,21 @@ else:
     # Hiển thị thông báo CỦA LẦN BẤM TRƯỚC ĐÓ (nếu có)
     if st.session_state['success_msg']:
         st.success(st.session_state['success_msg'])
-        st.session_state['success_msg'] = "" # Reset thông báo sau khi hiện
+        st.session_state['success_msg'] = "" 
         
     if st.session_state['error_msg']:
         st.error(st.session_state['error_msg'])
         st.session_state['error_msg'] = ""
 
     st.markdown('<div class="question-text">Nhập số ghế ghi trên món quà:</div>', unsafe_allow_html=True)
-    seat_num = st.text_input("Số ghế / SĐT:", key="seat_input")
+    
+    # Ép key động để reset ô input
+    seat_num = st.text_input("Số ghế / SĐT:", key=f"seat_{st.session_state['form_key']}")
 
     st.markdown('<div class="question-text">Cho quà vào Thùng số mấy?</div>', unsafe_allow_html=True)
-    box_num = st.text_input("Nhập số thùng (VD: 1, 2, 3...)", key="box_input")
+    
+    # Ép key động để reset ô input
+    box_num = st.text_input("Nhập số thùng (VD: 1, 2, 3...)", key=f"box_{st.session_state['form_key']}")
 
     if st.button("Hoàn thành", type="primary"):
         if not seat_num:
@@ -182,16 +185,16 @@ else:
                     elif is_already_packed:
                         st.session_state['error_msg'] = f"🚨 CẢNH BÁO TRÙNG LẶP: Số ghế '{seat_normalized}' đã được đóng vào Thùng số {box_packed} trước đó rồi!"
                     else:
+                        # Cập nhật vào Cột 6 (Packed) và Cột 7 (Số Thùng)
                         sheet.update_cell(row_to_update, 6, "☑️")
                         sheet.update_cell(row_to_update, 7, str(box_num))
                         
                         st.session_state['success_msg'] = f"📦 Đã đóng món quà của ghế {seat_normalized} vào Thùng số {box_num} thành công!"
-                        # Xóa trắng 2 ô nhập liệu sau khi thành công
-                        st.session_state['seat_input'] = ""
-                        st.session_state['box_input'] = ""
+                        
+                        # TĂNG KEY ĐỂ RESET FORM SẠCH SẼ
+                        st.session_state['form_key'] += 1 
                     
-                    # Rerun để load lại UI trống trơn cho lần quét tiếp theo
-                    st.rerun()
+                    st.rerun() 
 
                 except Exception as e:
                     st.session_state['error_msg'] = f"Có lỗi xảy ra: {e}"
@@ -226,7 +229,7 @@ else:
                             packed_boxes[box_id] = []
                         packed_boxes[box_id].append(seat)
 
-        # 1. HIỂN THỊ DANH SÁCH CHƯA ĐÓNG (Đổi Text theo ý m)
+        # 1. HIỂN THỊ DANH SÁCH CHƯA ĐÓNG
         st.markdown('<div class="question-text">⏳ Danh sách Quà chưa vào thùng:</div>', unsafe_allow_html=True)
         if unpacked_seats:
             sorted_unpacked = sort_seats(unpacked_seats)
