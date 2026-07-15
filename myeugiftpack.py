@@ -240,24 +240,30 @@ else:
 
         st.write("") 
 
+        
         # 2. HIỂN THỊ DANH SÁCH ĐÃ ĐÓNG VÀO TỪNG THÙNG
         st.markdown('<div class="question-text">✅ Thống kê Thùng:</div>', unsafe_allow_html=True)
         if packed_boxes:
-            sorted_boxes = sorted(packed_boxes.keys(), key=lambda x: int(x) if x.isdigit() else 999)
-            cols = st.columns(3) 
+            # ÉP SẮP XẾP: Lấy key ra, nếu là số thì sort theo số, thùng nào không phải số thì đẩy xuống cuối
+            def sort_box_key(key):
+                if key.isdigit():
+                    return (0, int(key)) # Nhóm số lên đầu
+                return (1, key) # Nhóm chữ ra sau
+
+            sorted_boxes = sorted(packed_boxes.keys(), key=sort_box_key)
             
-            for index, box_id in enumerate(sorted_boxes):
+            # Thay vì chia 3 cột (dễ bị nhảy lộn xộn), t liệt kê dọc từng thùng cho m dễ nhìn
+            for box_id in sorted_boxes:
                 seats_in_box = sort_seats(packed_boxes[box_id])
                 seat_str = ", ".join(seats_in_box)
                 
-                with cols[index % 3]:
-                    st.markdown(f"""
-                        <div class="box-card">
-                            <b style="color: #005C97; font-size: 16px;">📦 Thùng {box_id}</b> <br>
-                            <span style="color: gray; font-size: 12px;">{len(seats_in_box)} món</span><br>
-                            <div style="font-size: 14px; margin-top: 5px;">{seat_str}</div>
-                        </div>
-                    """, unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div class="box-card">
+                        <b style="color: #005C97; font-size: 16px;">📦 Thùng {box_id}</b> <br>
+                        <span style="color: gray; font-size: 12px;">{len(seats_in_box)} món</span><br>
+                        <div style="font-size: 14px; margin-top: 5px;">{seat_str}</div>
+                    </div>
+                """, unsafe_application_html=True)
         else:
             st.info("Chưa có thùng nào được đóng.")
 
