@@ -24,27 +24,33 @@ def sort_seats(seat_list):
     phone_numbers = []
     
     for seat in seat_list:
-        if len(seat) > 5 or seat.isdigit(): # Phân loại SĐT (dài hơn 5 ký tự hoặc toàn bộ là số)
+        if len(seat) > 5 or seat.isdigit():
             phone_numbers.append(seat)
         else:
-            # Tách chữ và số để sắp xếp (Ví dụ: A2 -> ('A', 2))
             match = re.match(r"([A-Z]+)(\d+)", seat)
             if match:
                 regular_seats.append((match.group(1), int(match.group(2)), seat))
             else:
-                regular_seats.append((seat, 0, seat)) # Trường hợp ngoại lệ
+                regular_seats.append((seat, 0, seat))
                 
-    # Sắp xếp ghế thường theo Chữ cái, rồi đến Số
     regular_seats.sort(key=lambda x: (x[0], x[1]))
-    
-    # Trả về list đã sắp xếp: Ghế thường trước, SĐT sau
     return [item[2] for item in regular_seats] + sorted(phone_numbers)
 
-# --- CACHE & STATE QUẢN LÝ ĐĂNG NHẬP ---
+# --- CACHE & STATE QUẢN LÝ ĐĂNG NHẬP VÀ FORM UI ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'staff_name' not in st.session_state:
     st.session_state['staff_name'] = ""
+
+# Biến tạm để reset trắng 2 ô nhập liệu và hiển thị thông báo
+if 'seat_input' not in st.session_state:
+    st.session_state['seat_input'] = ""
+if 'box_input' not in st.session_state:
+    st.session_state['box_input'] = ""
+if 'success_msg' not in st.session_state:
+    st.session_state['success_msg'] = ""
+if 'error_msg' not in st.session_state:
+    st.session_state['error_msg'] = ""
 
 # --- CẤU HÌNH GIAO DIỆN & CSS ---
 st.set_page_config(page_title="Đóng Thùng Sự Kiện", page_icon="📦", layout="centered")
@@ -99,7 +105,7 @@ if not st.session_state['logged_in']:
     danh_sach_pass_hop_le = {
         "DongThung01": "Kho Bãi 1",
         "DongThung02": "Kho Bãi 2",
-        "0519": "Admin Phương"
+        "0519": "Lê Phương" # Đã update Tên của m
     }
 
     if st.button("Vào hệ thống", type="primary"):
@@ -124,6 +130,16 @@ else:
     st.divider()
 
     # --- KHU VỰC 1: XỬ LÝ ĐÓNG THÙNG ---
+    
+    # Hiển thị thông báo CỦA LẦN BẤM TRƯỚC ĐÓ (nếu có)
+    if st.session_state['success_msg']:
+        st.success(st.session_state['success_msg'])
+        st.session_state['success_msg'] = "" # Reset thông báo sau khi hiện
+        
+    if st.session_state['error_msg']:
+        st.error(st.session_state['error_msg'])
+        st.session_state['error_msg'] = ""
+
     st.markdown('<div class="question-text">Nhập số ghế ghi trên món quà:</div>', unsafe_allow_html=True)
     seat_num = st.text_input("Số ghế / SĐT:", key="seat_input")
 
@@ -160,24 +176,32 @@ else:
                                     box_packed = row[6]
                             break
 
+                    # LUỒNG XỬ LÝ & BÁO LỖI VÀO SESSION STATE ĐỂ RERUN
                     if row_to_update == -1:
-                        st.error(f"🚨 LỖI: Số ghế '{seat_normalized}' chưa được ghi nhận trên hệ thống Nhận Quà!")
+                        st.session_state['error_msg'] = f"🚨 LỖI: Số ghế '{seat_normalized}' chưa được ghi nhận trên hệ thống Nhận Quà!"
                     elif is_already_packed:
-                        st.error(f"🚨 CẢNH BÁO TRÙNG LẶP: Số ghế '{seat_normalized}' đã được đóng vào Thùng số {box_packed} trước đó rồi!")
+                        st.session_state['error_msg'] = f"🚨 CẢNH BÁO TRÙNG LẶP: Số ghế '{seat_normalized}' đã được đóng vào Thùng số {box_packed} trước đó rồi!"
                     else:
                         sheet.update_cell(row_to_update, 6, "☑️")
                         sheet.update_cell(row_to_update, 7, str(box_num))
-                        st.success(f"📦 Đã đóng món quà của ghế {seat_normalized} vào Thùng số {box_num} thành công!")
+                        
+                        st.session_state['success_msg'] = f"📦 Đã đóng món quà của ghế {seat_normalized} vào Thùng số {box_num} thành công!"
+                        # Xóa trắng 2 ô nhập liệu sau khi thành công
+                        st.session_state['seat_input'] = ""
+                        st.session_state['box_input'] = ""
+                    
+                    # Rerun để load lại UI trống trơn cho lần quét tiếp theo
+                    st.rerun()
 
                 except Exception as e:
-                    st.error(f"Có lỗi xảy ra: {e}")
+                    st.session_state['error_msg'] = f"Có lỗi xảy ra: {e}"
+                    st.rerun()
 
     st.divider()
 
     # --- KHU VỰC 2: HIỂN THỊ DỮ LIỆU ĐỘNG ---
     st.subheader("📋 Tình trạng kiểm kê")
     
-    # Kéo data về 1 lần duy nhất để dựng cả 2 giao diện bên dưới cho mượt
     try:
         creds = get_credentials()
         client = gspread.authorize(creds)
@@ -185,51 +209,44 @@ else:
         all_data = sheet.get_all_values()
         
         unpacked_seats = []
-        packed_boxes = {} # Dictionary gom nhóm theo thùng
+        packed_boxes = {}
 
         for i in range(1, len(all_data)):
             row = all_data[i]
             if len(row) >= 3:
                 seat = row[2].replace("'", "").strip()
                 if seat:
-                    # Kiểm tra cột Packed (Cột 6 / index 5)
                     is_packed = True if len(row) > 5 and row[5] == "☑️" else False
                     
                     if not is_packed:
                         unpacked_seats.append(seat)
                     else:
-                        # Nếu đã pack, gom vào thùng (Cột 7 / index 6)
                         box_id = row[6] if len(row) > 6 and row[6] else "Không rõ thùng"
                         if box_id not in packed_boxes:
                             packed_boxes[box_id] = []
                         packed_boxes[box_id].append(seat)
 
-        # 1. HIỂN THỊ DANH SÁCH CHƯA ĐÓNG
-        st.markdown('<div class="question-text">⏳ Danh sách ghế chưa đóng:</div>', unsafe_allow_html=True)
+        # 1. HIỂN THỊ DANH SÁCH CHƯA ĐÓNG (Đổi Text theo ý m)
+        st.markdown('<div class="question-text">⏳ Danh sách Quà chưa vào thùng:</div>', unsafe_allow_html=True)
         if unpacked_seats:
             sorted_unpacked = sort_seats(unpacked_seats)
-            # Render ra giao diện dạng viên thuốc (Chip) nhìn cho pro
             chips_html = "".join([f'<span class="seat-chip">{s}</span>' for s in sorted_unpacked])
             st.markdown(f"<div>{chips_html}</div>", unsafe_allow_html=True)
         else:
             st.success("Tất cả quà đã được đóng thùng!")
 
-        st.write("") # Tạo khoảng trống
+        st.write("") 
 
         # 2. HIỂN THỊ DANH SÁCH ĐÃ ĐÓNG VÀO TỪNG THÙNG
         st.markdown('<div class="question-text">✅ Thống kê Thùng:</div>', unsafe_allow_html=True)
         if packed_boxes:
-            # Sắp xếp các thùng theo số thứ tự (1, 2, 3...)
             sorted_boxes = sorted(packed_boxes.keys(), key=lambda x: int(x) if x.isdigit() else 999)
-            
-            # Chia cột hiển thị (Nếu có nhiều thùng thì nó sẽ tự động rớt dòng khá đẹp)
-            cols = st.columns(3) # Tạm chia 3 cột 1 hàng
+            cols = st.columns(3) 
             
             for index, box_id in enumerate(sorted_boxes):
                 seats_in_box = sort_seats(packed_boxes[box_id])
                 seat_str = ", ".join(seats_in_box)
                 
-                # Hiển thị vào từng cột
                 with cols[index % 3]:
                     st.markdown(f"""
                         <div class="box-card">
